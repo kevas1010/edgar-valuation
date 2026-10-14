@@ -59,6 +59,7 @@ class Financials:
     shares_outstanding: float
     shares_as_of: str
     notes: list[DataNote] = field(default_factory=list)
+    year_ends: dict[int, pd.Timestamp] = field(default_factory=dict)  # fiscal year -> period-end date
 
     def latest(self, item: str) -> float:
         return self.table.loc[item].iloc[-1]
@@ -173,6 +174,7 @@ def extract_financials(facts: dict, ticker: str, n_years: int = 5) -> Financials
         shares_outstanding=shares,
         shares_as_of=as_of,
         notes=notes,
+        year_ends=year_ends,
     )
 
 

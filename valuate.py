@@ -2,15 +2,20 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
+from pathlib import Path
 
 import pandas as pd
 
 from edgar.client import EdgarClient
 from edgar.extract import extract_financials, with_derived
+from excel.writer import ModelData, write_workbook
+from model.assumptions import default_assumptions
 from model.beta import regress_beta
 from model.prices import MARKET_INDEX, get_prices, weekly_series
 
 PCT_ROWS = {"Revenue Growth %", "EBITDA Margin %", "FCF Margin %", "Effective Tax Rate %"}
+OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 
 
 def format_historicals(table: pd.DataFrame) -> pd.DataFrame:
@@ -35,37 +40,27 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
+    today = date.today()
     client = EdgarClient()
-    fin = extract_financials(client.company_facts(args.ticker), args.ticker)
 
-    print(f"\n{fin.entity_name} ({fin.ticker})  -  $ millions unless noted\n")
+    print(f"Pulling SEC EDGAR financials for {args.ticker.upper()}...")
+    fin = extract_financials(client.company_facts(args.ticker), args.ticker)
     with pd.option_context("display.width", 200, "display.max_columns", 20):
         print(format_historicals(with_derived(fin.table)).to_string())
-    print(f"\nShares outstanding: {fin.shares_outstanding:,.0f} (as of {fin.shares_as_of})")
 
-    print("\nSource tags:")
-    for item, src in fin.sources.items():
-        print(f"  {item:<20} {src}")
-    if fin.notes:
-        print("\nData notes:")
-        for n in fin.notes:
-            print(f"  [{n.category}] {n.item}: {n.message}")
-
+    print(f"Pulling prices and running beta regression vs {MARKET_INDEX}...")
     stock_px, market_px = get_prices(fin.ticker), get_prices(MARKET_INDEX)
     beta = regress_beta(weekly_series(stock_px), weekly_series(market_px))
-    print(f"\nCurrent price: ${stock_px['current_price']:,.2f} (as of {stock_px['price_date']})")
-    print(f"\nBeta regression: weekly returns vs {MARKET_INDEX}, "
-          f"{beta.returns.index[0]:%Y-%m-%d} to {beta.returns.index[-1]:%Y-%m-%d}")
-    print(f"  Beta            {beta.beta:8.3f}   (std err {beta.std_err:.3f}, "
-          f"95% CI {beta.beta - 1.96 * beta.std_err:.2f} to {beta.beta + 1.96 * beta.std_err:.2f})")
-    print(f"  Alpha (weekly)  {beta.alpha:8.4f}")
-    print(f"  R-squared       {beta.r_squared:8.3f}")
-    print(f"  Observations    {beta.n_obs:8d}")
-    print(f"  Blume-adjusted  {beta.adjusted_beta:8.3f}   (reference only; model uses raw beta)")
-    print("\n  Chart data (first 5 of {} points):".format(len(beta.returns)))
-    print(beta.returns.head().map(lambda v: f"{v:+.2%}").to_string())
-    print("\n  Fit line endpoints:")
-    print(beta.fit_line().map(lambda v: f"{v:+.2%}").to_string(index=False))
+    print(f"  Price ${stock_px['current_price']:,.2f} | beta {beta.beta:.2f} (R2 {beta.r_squared:.2f}, n={beta.n_obs})")
+
+    assumptions = default_assumptions(fin, beta.beta, fin.notes)
+    data = ModelData(fin=fin, assumptions=assumptions, beta=beta,
+                     price=stock_px["current_price"], price_date=stock_px["price_date"], as_of=today)
+    path = write_workbook(data, OUTPUT_DIR / f"{fin.ticker}_valuation_{today.isoformat()}.xlsx")
+
+    for n in fin.notes:
+        print(f"  [{n.category}] {n.item}: {n.message}")
+    print(f"\nWrote {path}")
 
 
 if __name__ == "__main__":

@@ -92,6 +92,10 @@ The terminal-year FCF sets **CapEx = D&A** (a switch on Assumptions). In steady 
 
 **From enterprise value to price.** `Equity value = EV − debt + cash`, then divide by shares outstanding (the latest filing's cover-page count; basic, not diluted).
 
+The full DCF sheet for AEHR. Green values are links to Historicals and Assumptions; black values are formulas.
+
+![DCF sheet](docs/images/dcf.png)
+
 ### 4. Sensitivity
 
 The two least certain inputs are WACC and terminal growth. Each cell in the grid re-runs the DCF in one formula (`SUMPRODUCT` over the projected cash flows plus a re-discounted terminal value), so the table stays live. It doesn't need Excel's Data Table feature, and anyone can read the formula. Cells where WACC ≤ g show "n/m", because the Gordon formula breaks down there.

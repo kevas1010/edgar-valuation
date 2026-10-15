@@ -1,0 +1,3 @@
+-r requirements.txt
+formulas>=1.2      # pure-Python Excel formula engine: tests evaluate the workbook's real formulas offline
+pymupdf>=1.24      # tools/render_sheets.py: turns Excel's PDF export into README screenshots

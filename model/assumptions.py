@@ -37,7 +37,35 @@ class Assumptions:
     terminal_growth: float = TERMINAL_GROWTH
     cost_of_debt: float = PRE_TAX_COST_OF_DEBT
     debt_materiality: float = DEBT_MATERIALITY
+    # Steady state: in the terminal year, maintenance CapEx just replaces what depreciates.
+    terminal_capex_equals_da: bool = True
     basis: dict[str, str] = field(default_factory=dict)   # how each default was derived (Assumptions notes column)
+
+
+# Bear / bull cases shift growth and margin by a fixed spread around the base case.
+SCENARIO_GROWTH_SPREAD = 0.05
+SCENARIO_MARGIN_SPREAD = 0.05
+SCENARIO_PROBABILITIES = {"Bear": 0.25, "Base": 0.50, "Bull": 0.25}
+
+
+@dataclass
+class Scenario:
+    name: str
+    probability: float
+    revenue_growth: list[float]
+    ebitda_margin: float
+
+
+def default_scenarios(a: Assumptions) -> list[Scenario]:
+    out = []
+    for name, sign in (("Bear", -1), ("Base", 0), ("Bull", 1)):
+        out.append(Scenario(
+            name=name,
+            probability=SCENARIO_PROBABILITIES[name],
+            revenue_growth=[g + sign * SCENARIO_GROWTH_SPREAD for g in a.revenue_growth],
+            ebitda_margin=a.ebitda_margin + sign * SCENARIO_MARGIN_SPREAD,
+        ))
+    return out
 
 
 def _weighted_ratio(num: pd.Series, den: pd.Series) -> float:
@@ -117,5 +145,7 @@ def default_assumptions(fin: Financials, beta: float, notes: list[DataNote]) -> 
             "terminal_growth": "Long-run nominal GDP-like growth",
             "cost_of_debt": "Pre-tax cost of debt (book debt only)",
             "debt_materiality": "Debt below this share of capital is ignored (all-equity WACC)",
+            "terminal_capex_equals_da": "Yes = terminal-year FCF uses CapEx = D&A (steady state: no net investment "
+                                        "beyond replacing worn-out assets). No = carry CapEx % of revenue forever",
         },
     )

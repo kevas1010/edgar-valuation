@@ -14,6 +14,7 @@ BLUE, BLACK, GREEN, WHITE, GREY = "0000FF", "000000", "008000", "FFFFFF", "80808
 
 FMT_MM = '$#,##0.0,,;($#,##0.0,,);"–"'        # $ millions, 1 decimal
 FMT_PCT = "0.0%;(0.0%);0.0%"
+FMT_PCT2 = "0.00%;(0.00%);0.00%"            # rates where 1 decimal would misstate the input
 FMT_PER_SHARE = '$#,##0.00;($#,##0.00);"–"'
 FMT_SHARES_MM = '#,##0.0,,'                   # share count in millions
 FMT_MULT = '0.0"x";(0.0"x");"–"'
@@ -47,13 +48,17 @@ def inp(ws, ref, value, fmt=None, bold=False):
 
 
 def calc(ws, ref, formula, fmt=None, bold=False):
-    """Formula computed on this sheet (black)."""
-    return _put(ws, ref, formula, BLACK, fmt, bold)
+    """Formula computed on this sheet (black). Right-aligned so text results like "n/m" line up with numbers."""
+    c = _put(ws, ref, formula, BLACK, fmt, bold)
+    c.alignment = Alignment(horizontal="right")
+    return c
 
 
 def link(ws, ref, formula, fmt=None, bold=False):
     """Pure reference to another sheet or named input (green)."""
-    return _put(ws, ref, formula, GREEN, fmt, bold)
+    c = _put(ws, ref, formula, GREEN, fmt, bold)
+    c.alignment = Alignment(horizontal="right")
+    return c
 
 
 def label(ws, ref, text, bold=False, italic=False, indent=0, color=BLACK):

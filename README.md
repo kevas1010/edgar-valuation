@@ -4,15 +4,11 @@
 
 I've managed my own portfolio for three years, with $24k of total deposits. During the recent market crash it fell from about $50k to $44k in less than three days, wiping out $6k of my positions.
 
-That drop exposed a gap in how I invested. My research was almost entirely bottom-up: find a company, research it individually, and buy. I mostly ignored the broader market drivers, even ones I saw coming. I knew a lot of private credit was going to get scrutinized, but I never worked out what that meant for what I owned.
+Most of my picks were from ground-up research and ignored the broader market drivers. Decided to explore other ways to evaluate my decisions/find easier ways to look at the numbers. This is a valuation model for audit.
 
-So I rebuilt my process into three layers:
+I then had it go through AI analysis and co-built it through my Claude models after I gave it a project directive. Part of it was also to refresh pulling data through Python CLI's like my prior projects had done in high school. 
 
-1. **Market drivers first.** Before looking at any single stock, study the macro and sector forces moving the market, and ask how each holding is exposed to them.
-2. **In-depth company research.** Keep the stock-by-stock work, but go much deeper than I used to.
-3. **A valuation model I can audit.** Put a number on every idea with a model built from the company's own SEC filings, where every assumption is visible and editable. That's this project.
-
-[Portfolio mode](#portfolio-mode) applies the third layer to every stock I hold at once and tracks the results over time.
+[Portfolio mode](#portfolio-mode) applies the third layer to every stock I hold at once and tracks the results over time. 
 
 ## The project
 

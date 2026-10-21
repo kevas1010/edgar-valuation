@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT))
 from edgar.client import EdgarClient  # noqa: E402
 from excel.writer import write_workbook  # noqa: E402
 from model.prices import get_prices  # noqa: E402
-from valuate import build_model  # noqa: E402
+from model.pipeline import build_model  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures"
 FIXTURE_DATE = date(2026, 10, 14)

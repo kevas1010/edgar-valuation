@@ -1,103 +1,29 @@
-"""CLI entry point:  python valuate.py AEHR --peers TER,COHU,FORM,KLIC"""
+"""CLI entry point.
+
+    python valuate.py AEHR --peers TER,COHU,FORM,KLIC        # one company -> one valuation workbook
+    python valuate.py --portfolio positions/Portfolio_Positions.csv   # every stock in a Fidelity export
+"""
 from __future__ import annotations
 
 import argparse
-from datetime import date, datetime
+import math
+from datetime import date
 from pathlib import Path
-from typing import Callable
 
 import pandas as pd
 
 from edgar.client import EdgarClient
-from edgar.extract import extract_financials, with_derived
-from excel.writer import ModelData, write_workbook
-from model.assumptions import default_assumptions, default_scenarios
-from model.beta import regress_beta
-from model.comps import implied_value_per_share, load_peers, multiples_table
-from model.dcf import dcf, wacc
-from model.prices import MARKET_INDEX, get_prices, weekly_series
+from excel.writer import write_workbook
+from model.pipeline import build_model, python_values
 
-PCT_ROWS = {"Revenue Growth %", "EBITDA Margin %", "FCF Margin %", "Effective Tax Rate %"}
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 
 
-def format_historicals(table: pd.DataFrame) -> pd.DataFrame:
-    """$ millions with 1 decimal, percentages with 1 decimal, blanks for missing."""
-    def fmt(row_name, v):
-        if pd.isna(v):
-            return ""
-        return f"{v:.1%}" if row_name in PCT_ROWS else f"{v / 1e6:,.1f}"
-    out = table.copy().astype(object)
-    for row in out.index:
-        out.loc[row] = [fmt(row, v) for v in table.loc[row]]
-    out.columns = [f"FY{c}" for c in out.columns]
-    return out
-
-
-def build_model(ticker: str, peer_tickers: list[str], client: EdgarClient,
-                price_loader: Callable[[str], dict] = get_prices, as_of: date | None = None,
-                pulled_at: datetime | None = None, verbose: bool = False) -> ModelData:
-    """Pull every input and assemble the model. Data sources are injectable, so tests run offline."""
-    say = print if verbose else (lambda *a, **k: None)
-
-    say(f"Pulling SEC EDGAR financials for {ticker.upper()}...")
-    fin = extract_financials(client.company_facts(ticker), ticker)
-    say(format_historicals(with_derived(fin.table)).to_string())
-
-    say(f"\nPulling prices and running beta regression vs {MARKET_INDEX}...")
-    stock_px, market_px = price_loader(fin.ticker), price_loader(MARKET_INDEX)
-    beta = regress_beta(weekly_series(stock_px), weekly_series(market_px))
-    say(f"  Price ${stock_px['current_price']:,.2f} | beta {beta.beta:.2f} (R2 {beta.r_squared:.2f}, n={beta.n_obs})")
-
-    peers = []
-    if peer_tickers:
-        say(f"\nPulling peers: {', '.join(peer_tickers)}...")
-        peers = load_peers(client, peer_tickers, fin.notes, price_loader)
-        if peers:
-            say(multiples_table(peers).map(lambda v: "n/m" if pd.isna(v) else f"{v:.1f}x").to_string())
-
-    assumptions = default_assumptions(fin, beta.beta, fin.notes)
-    return ModelData(fin=fin, assumptions=assumptions, scenarios=default_scenarios(assumptions), beta=beta,
-                     price=stock_px["current_price"], price_date=stock_px["price_date"],
-                     as_of=as_of or date.today(), peers=peers, peer_tickers=peer_tickers,
-                     pulled_at=pulled_at or datetime.now())
-
-
-def python_values(data: ModelData, terminal_growth: float | None = None) -> dict[str, float]:
-    """Re-run the model in Python (mirrors the workbook formulas). Used for the console summary and tests."""
-    fin, a = data.fin, data.assumptions
-    g = a.terminal_growth if terminal_growth is None else terminal_growth
-    debt, cash = fin.latest("Debt"), fin.latest("Cash")
-    r = wacc(a.risk_free, a.beta, a.equity_risk_premium, a.cost_of_debt, a.tax_rate,
-             data.price * fin.shares_outstanding, debt, a.debt_materiality)
-    out = {"WACC": r}
-    for s in data.scenarios:
-        growth = a.revenue_growth if s.name == "Base" else s.revenue_growth       # Base links to Assumptions
-        margin = a.ebitda_margin if s.name == "Base" else s.ebitda_margin
-        result = dcf(fin.latest("Revenue"), growth, margin, a.da_pct, a.capex_pct, a.tax_rate, r, g,
-                     debt, cash, fin.shares_outstanding, a.terminal_capex_equals_da)
-        out[s.name], out[f"{s.name}EV"] = result.value_per_share, result.enterprise_value
-    out["Target"] = sum(s.probability * out[s.name] for s in data.scenarios) / sum(s.probability for s in data.scenarios)
-    t = with_derived(fin.table)
-    out["Comps"] = implied_value_per_share(data.peers, fin.latest("Revenue"), t.loc["EBITDA"].iloc[-1],
-                                           fin.latest("Net Income"), debt, cash, fin.shares_outstanding)["Average"]
-    return out
-
-
-def parse_args(argv=None):
-    p = argparse.ArgumentParser(description="Build an Excel valuation model from SEC EDGAR filings.")
-    p.add_argument("ticker", help="Target company ticker, e.g. AEHR")
-    p.add_argument("--peers", default="", help="Comma-separated peer tickers, e.g. TER,COHU,FORM,KLIC")
-    p.add_argument("--out-dir", type=Path, default=OUTPUT_DIR, help="Where to write the workbook (default: output/)")
-    return p.parse_args(argv)
-
-
-def main(argv=None):
-    args = parse_args(argv)
-    peer_tickers = [t.strip().upper() for t in args.peers.split(",") if t.strip()]
+def run_single(ticker: str, peers: str, out_dir: Path) -> None:
+    peer_tickers = [t.strip().upper() for t in peers.split(",") if t.strip()]
     with pd.option_context("display.width", 200, "display.max_columns", 20):
-        data = build_model(args.ticker, peer_tickers, EdgarClient(), verbose=True)
-    path = write_workbook(data, args.out_dir / f"{data.fin.ticker}_valuation_{data.as_of.isoformat()}.xlsx")
+        data = build_model(ticker, peer_tickers, EdgarClient(), verbose=True)
+    path = write_workbook(data, out_dir / f"{data.fin.ticker}_valuation_{data.as_of.isoformat()}.xlsx")
 
     v = python_values(data)
     print(f"\nWACC {v['WACC']:.1%} | Bear ${v['Bear']:,.2f} | Base (DCF) ${v['Base']:,.2f} | Bull ${v['Bull']:,.2f}")
@@ -106,6 +32,50 @@ def main(argv=None):
           f"({v['Target'] / data.price - 1:+.1%})")
     print(f"\n{len(data.fin.notes)} data notes (see the Data Notes sheet)")
     print(f"Wrote {path}")
+
+
+def run_portfolio(positions: Path, out_dir: Path) -> None:
+    # Imported here so the single-ticker path doesn't depend on portfolio code.
+    from excel.portfolio_writer import write_portfolio_workbook
+    from portfolio.fidelity import parse_positions
+    from portfolio.run import append_history, history_totals, value_portfolio
+
+    today = date.today()
+    holdings = parse_positions(positions)
+    print(f"Read {len(holdings)} holdings from {positions.name}. Valuing each stock...")
+    run_dir = out_dir / "portfolio" / today.isoformat()
+    results = value_portfolio(holdings, EdgarClient(), run_dir, as_of=today)
+
+    history = append_history(results, out_dir / "portfolio" / "history.csv", today)
+    totals = history_totals(history)
+    path = write_portfolio_workbook(results, history, totals, run_dir / f"Portfolio_{today.isoformat()}.xlsx", today)
+
+    latest = totals.iloc[-1]
+    upside = latest["weighted_upside"]
+    print(f"\nPortfolio value ${latest['market_value']:,.2f} | gain ${latest['gain']:,.2f} ({latest['gain_pct']:+.1%}) "
+          f"| modeled {sum(r.status == 'Modeled' for r in results)}/{len(results)} holdings"
+          + ("" if math.isnan(upside) else f" | value-weighted model upside {upside:+.1%}"))
+    print(f"Wrote {path}")
+
+
+def parse_args(argv=None):
+    p = argparse.ArgumentParser(description="Build Excel valuation models from SEC EDGAR filings.")
+    p.add_argument("ticker", nargs="?", help="Target company ticker, e.g. AEHR")
+    p.add_argument("--peers", default="", help="Comma-separated peer tickers, e.g. TER,COHU,FORM,KLIC")
+    p.add_argument("--portfolio", type=Path, help="Fidelity positions CSV: value every stock in it")
+    p.add_argument("--out-dir", type=Path, default=OUTPUT_DIR, help="Where to write workbooks (default: output/)")
+    args = p.parse_args(argv)
+    if bool(args.ticker) == bool(args.portfolio):
+        p.error("give either a TICKER or --portfolio PATH (not both)")
+    return args
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    if args.portfolio:
+        run_portfolio(args.portfolio, args.out_dir)
+    else:
+        run_single(args.ticker, args.peers, args.out_dir)
 
 
 if __name__ == "__main__":

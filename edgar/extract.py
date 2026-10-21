@@ -137,6 +137,10 @@ def fiscal_year_ends(facts: dict, n_years: int) -> dict[int, pd.Timestamp]:
 def extract_financials(facts: dict, ticker: str, n_years: int = 5) -> Financials:
     notes: list[DataNote] = []
     year_ends = fiscal_year_ends(facts, n_years)
+    if not year_ends:
+        # Individual line items may be missing (handled below), but with no annual revenue or
+        # net income at all there is nothing to value - typically a fund, ETF, or 20-F filer.
+        raise ValueError(f"{ticker.upper()}: no annual 10-K revenue or net income in its XBRL filings")
     years = list(year_ends)
     table = pd.DataFrame(index=[i.name for i in LINE_ITEMS] + ["Debt"], columns=years, dtype=float)
     sources: dict[str, str] = {}

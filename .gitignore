@@ -5,3 +5,10 @@ __pycache__/
 cache/
 output/
 ~$*.xlsx
+
+# Portfolio mode: brokerage exports contain account numbers and private holdings.
+# Never commit them. (The fake sample in tests/fixtures/ is allowed explicitly.)
+positions/
+Portfolio_Positions*.csv
+*positions*.csv
+!tests/fixtures/fidelity_positions_sample.csv

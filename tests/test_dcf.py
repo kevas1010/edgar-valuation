@@ -10,7 +10,7 @@ import pytest
 from openpyxl import load_workbook
 
 from model.dcf import dcf, wacc
-from valuate import python_values
+from model.pipeline import python_values
 
 # ---------------------------------------------------------------- 1. hand-computed example
 

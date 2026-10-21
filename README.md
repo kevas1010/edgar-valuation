@@ -1,5 +1,21 @@
 # EDGAR Equity Valuation Model
 
+## Why I built this
+
+I've managed my own portfolio for three years, with $24k of total deposits. During the recent market crash it fell from about $50k to $44k in less than three days, wiping out $6k of my positions.
+
+That drop exposed a gap in how I invested. My research was almost entirely bottom-up: find a company, research it individually, and buy. I mostly ignored the broader market drivers, even ones I saw coming. I knew a lot of private credit was going to get scrutinized, but I never worked out what that meant for what I owned.
+
+So I rebuilt my process into three layers:
+
+1. **Market drivers first.** Before looking at any single stock, study the macro and sector forces moving the market, and ask how each holding is exposed to them.
+2. **In-depth company research.** Keep the stock-by-stock work, but go much deeper than I used to.
+3. **A valuation model I can audit.** Put a number on every idea with a model built from the company's own SEC filings, where every assumption is visible and editable. That's this project.
+
+[Portfolio mode](#portfolio-mode) applies the third layer to every stock I hold at once and tracks the results over time.
+
+## The project
+
 A Python CLI that pulls a company's **reported financials straight from SEC EDGAR** and builds a working Excel valuation model with a **DCF**, **comparable companies**, and a **scenario-weighted price target**. All of it is driven by **live Excel formulas**. Change any blue assumption and the price target updates.
 
 ```bash
@@ -24,7 +40,7 @@ python -m venv .venv
 .venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
 pip install -r requirements-dev.txt
 python valuate.py AEHR --peers TER,COHU,FORM,KLIC
-pytest                          # 22 tests, fully offline
+pytest                          # 30 tests, fully offline
 ```
 
 Every SEC and price response is cached in `cache/`, so reruns on the same day are instant and offline. Tested on AEHR, TER and MSFT with no code changes. `python valuate.py MSFT --peers GOOGL,ORCL,AMZN,CRM` also works.
@@ -42,6 +58,39 @@ Every SEC and price response is cached in `cache/`, so reruns on the same day ar
 | **Comps** | Peer market cap, EV, EV/Revenue, EV/EBITDA, P/E; median and mean; peer medians applied to the target's metrics. |
 | **Scenarios** | Bear / base / bull, each a full DCF with its own growth and margin, weighted by probability into the price target. |
 | **Data Notes** | Missing tags, fallback tags used, assumptions, excluded peers, data sources, pull timestamp. |
+
+
+## Portfolio mode
+
+Value every stock in a brokerage account and track it over time:
+
+```bash
+python valuate.py --portfolio positions/Portfolio_Positions_Oct-21-2026.csv
+```
+
+Export the file from Fidelity (Positions page → download icon) and save it under `positions/`. That folder, and anything named like a positions export, is gitignored, because the file contains your account numbers. The parser combines the same stock held in several accounts, and it never keeps account numbers, only account names.
+
+Each run writes to `output/portfolio/<date>/`:
+
+- **`Portfolio_<date>.xlsx`** has one row per holding: market value, cost basis, gain $ and %, weight, DCF value, scenario-weighted model target, and model upside vs the exported price. Each row links to that stock's full valuation workbook. The totals include a value-weighted model upside across the modeled holdings. Gains, weights, upside and totals are live formulas.
+- **A full valuation workbook for every stock**, the same model as the single-ticker run.
+- **The History sheet** shows the portfolio across runs. Each run adds a dated snapshot to `output/portfolio/history.csv`; re-running on the same day replaces that day's snapshot.
+
+![Portfolio sheet (fake sample positions)](docs/images/portfolio.png)
+*Sample output from the fake positions file in `tests/fixtures/`, not real holdings.*
+
+What isn't modeled is still tracked for gain/loss, and the reason is shown:
+
+| Holding | Treatment |
+|---|---|
+| Money market (`SPAXX**`, `FDRXX**`) | Cash |
+| Mutual funds / ETFs (e.g. `FXAIX`) | No company financials on EDGAR |
+| Options | Not modeled |
+| Holding partnerships / trusts that report no revenue (e.g. AB, ETHW) | No operating cash flows to model |
+| Model value per share ≤ $0 (e.g. heavy debt, or GAAP losses after stock-based comp) | DCF shown, upside "n/m", excluded from the weighted upside. A share can't be worth less than zero, so this is a warning to revisit the assumptions, not a price. |
+| Cost basis shown as `--` by Fidelity | Gain is "n/a" and excluded from the totals, not counted as zero |
+
+Portfolio runs don't use peers, so each holding's comps value is blank and its target comes from the DCF scenarios. One holding failing (a delisted ticker, an unusual filer) never stops the run.
 
 ---
 
@@ -145,7 +194,7 @@ A good next step is to work backwards: on the Scenarios sheet, find the growth a
 pytest
 ```
 
-The 22 tests run **offline** against `tests/fixtures/`: real SEC and yfinance responses captured on 2026-10-14 and trimmed by `tools/make_fixtures.py`.
+The 30 tests run **offline** against `tests/fixtures/`: real SEC and yfinance responses captured on 2026-10-14 and trimmed by `tools/make_fixtures.py`.
 
 | Test | What it proves |
 |---|---|
@@ -153,6 +202,7 @@ The 22 tests run **offline** against `tests/fixtures/`: real SEC and yfinance re
 | `test_beta.py` | statsmodels beta matches `numpy.polyfit` within 1e-6; a synthetic series with a known beta of 1.5 recovers it. |
 | `test_dcf.py` | The Python DCF matches a hand-worked example. Then the **real workbook formulas** are evaluated with the pure-Python [`formulas`](https://github.com/vinci1it2000/formulas) engine and must match the Python model (to 1e-9, far tighter than the $0.01 spec). Raising terminal growth must change the Summary target. No cell may evaluate to an Excel error. |
 | `test_comps.py` | EV math, negative and outlier multiples excluded, implied value per share, bad peer tickers skipped with a note. |
+| `test_portfolio.py` | Fidelity formats parsed (`$1,234.56`, `--`, footer, money market, options), accounts combined, no account numbers in output, each holding's target equals the single-ticker model, portfolio workbook formulas evaluate with no errors, history replaces same-day runs. |
 
 The workbook test caught a real problem during development. AEHR's value is mostly cash, so a +1% error in the terminal value moves value per share by only $0.002, which slipped under a $0.01 tolerance. I tightened the tolerance after deliberately breaking the formula and watching the test still pass.
 
@@ -161,16 +211,20 @@ The workbook test caught a real problem during development. AEHR's value is most
 ## Project structure
 
 ```
-valuate.py            CLI entry point; build_model() assembles every input
+valuate.py            CLI entry point: single ticker or --portfolio
 edgar/client.py       SEC fetch + on-disk cache + rate limit (User-Agent, ≤10 req/s)
 edgar/extract.py      XBRL tag fallback logic -> tidy 5-year table + Data Notes
 model/assumptions.py  default assumptions and bear/bull scenarios from history
 model/beta.py         OLS beta regression (statsmodels)
 model/comps.py        peer data, multiples, n/m rules, implied value
 model/dcf.py          pure-Python reference DCF/WACC (what the tests check Excel against)
+model/pipeline.py     build_model() pulls every input; python_values() re-runs the model in Python
 model/prices.py       yfinance prices, cached per ticker per day
 excel/writer.py       builds every sheet with live formulas and named ranges
 excel/styles.py       banker formatting conventions
+excel/portfolio_writer.py  portfolio workbook (holdings, gains, model upside, history)
+portfolio/fidelity.py Fidelity positions CSV parser
+portfolio/run.py      values each holding, isolates failures, appends dated history
 tests/                pytest, offline against tests/fixtures/
 tools/                fixture builder, Excel verification, screenshot renderer
 ```

@@ -1,0 +1,14 @@
+﻿Account number,Account name,Symbol,Description,Quantity,Last price,Last price change,Current value,Today's gain/loss dollar,Today's gain/loss percent,Total gain/loss dollar,Total gain/loss percent,Percent of account,Cost basis total,Average cost basis,Type
+X00000001,FAKE INDIVIDUAL,SPAXX**,HELD IN MONEY MARKET,,,,$1250.00,,,,,10.00%,,,Cash,
+X00000001,FAKE INDIVIDUAL,AEHR,AEHR TEST SYSTEMS,40,$71.71,+$1.20,"$2,868.40",+$48.00,+1.70%,"+$1,668.40",+139.03%,22.95%,"$1,200.00",$30.00,Cash,
+X00000001,FAKE INDIVIDUAL,TER,TERADYNE INC,5,$357.33,-$2.10,"$1,786.65",-$10.50,-0.58%,-$213.35,-10.67%,14.29%,"$2,000.00",$400.00,Cash,
+X00000001,FAKE INDIVIDUAL,FXAIX,FIDELITY 500 INDEX FUND,10.123,$215.00,+$1.00,"$2,176.45",+$10.12,+0.47%,+$176.45,+8.82%,17.41%,"$2,000.00",$197.57,Cash,
+X00000001,FAKE INDIVIDUAL, -AEHR261120C80,AEHR NOV 20 2026 $80 CALL,1,$4.10,,$410.00,,,+$110.00,+36.67%,3.28%,$300.00,$3.00,Margin,
+X00000001,FAKE INDIVIDUAL,Pending Activity,,,,,-$50.00,,,,,,,,,
+X00000002,FAKE ROTH IRA,AEHR,AEHR TEST SYSTEMS,10,$71.71,+$1.20,$717.10,+$12.00,+1.70%,-$82.90,-10.36%,40.00%,$800.00,$80.00,Cash,
+X00000002,FAKE ROTH IRA,FDRXX**,FIDELITY GOVERNMENT CASH RESERVES,,,,$500.00,,,,,27.89%,,,Cash,
+X00000002,FAKE ROTH IRA,COHU,COHU INC,8,$57.31,--,$458.48,--,--,--,--,25.57%,--,--,Cash,
+
+"The data and information in this spreadsheet is provided to you solely for your use and is not for distribution. FAKE SAMPLE FOR TESTS."
+"Brokerage services are provided by Fidelity Brokerage Services LLC (FBS), 900 Salem Street, Smithfield, RI 02917. FAKE SAMPLE."
+"Date downloaded Oct-14-2026 4:05 p.m ET"
